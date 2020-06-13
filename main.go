@@ -1,67 +1,57 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	 MQTT "github.com/eclipse/paho.mqtt.golang"
-	 "github.com/influxdata/influxdb/client/v2"
-	 "os"
-	 "log"
-	 "math/rand"
-	 "os/signal"
-	 "syscall"
-	 "time"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	MQTT "github.com/eclipse/paho.mqtt.golang"
+	"github.com/influxdata/influxdb/client/v2"
 )
 
-var f MQTT.MessageHandler = func(client MQTT.Client, msg MQTT.Message){ 
-   fmt.Printf("MSG: %s\n", msg.Payload())
-	 httpClient := createClient()
-	 createMetrics(httpClient)
+type Metric struct {
+	Fieldname       string
+	Fieldvalue      string
+	Measurementname string
 }
 
-func createMetrics(c client.Client) {
+const (
+	INFLUXDB_NAME = "teste_db"
+	USERNAME      = "admin"
+	PASSWORD      = "admin"
+	HOST          = "http://localhost:8086"
+)
 
-	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  "teste_db",
-		Precision: "us",
+var hc = createClient()
+
+var f MQTT.MessageHandler = func(client MQTT.Client, msg MQTT.Message) {
+	fmt.Printf("MSG: %s\n", msg.Payload())
+	var metric Metric
+	json.Unmarshal([]byte(msg.Payload()), &metric)
+	fmt.Printf("Nome da metrica: %s, Valor do campo: %s, nome da métrica: %s", metric.Fieldname, metric.Fieldvalue, metric.Measurementname)
+	bp := createMetrics(metric.Fieldname, metric.Fieldvalue, metric.Measurementname)
+	hc.Write(bp)
+}
+
+func createMetrics(fn string, fv string, mn string) client.BatchPoints {
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  INFLUXDB_NAME,
+		Precision: "s",
 	})
 
-	if err != nil {
-		log.Fatalln("Error: ", err)
-	}
-
-	tags := map[string]string{
-		"cluster": "host1",
-		"host":    fmt.Sprintf("192.168.%d.%d", 1, rand.Intn(100)),
-	}
+	tags := map[string]string{"cpu": "cpu-total"}
 
 	fields := map[string]interface{}{
-		"cpu_usage":  rand.Float64() * 100.0,
-		"disk_usage": rand.Float64() * 100.0,	
+		fn: fv,
 	}
 
-	eventTime := time.Now().Add(time.Second * -20)
-
-	point, err := client.NewPoint(
-		"node_status",
-		tags,
-		fields,
-		eventTime.Add(time.Second*10),
-	)
-
-	bp.AddPoint(point)
-}
-	
-func createClient() client.Client {
-	c, err := client.NewHTTPClient(client.HTTPConfig{
-			Addr:     "http://localhost:8086",
-			Username: "admiaaan",
-			Password: "admin",
-	})
-
-	if err != nil {
-			log.Fatalln("Error: ", err)
-	}
-	return c
+	pt, _ := client.NewPoint(mn, tags, fields, time.Now())
+	bp.AddPoint(pt)
+	return bp
 }
 
 func main() {
@@ -69,22 +59,36 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-   opts := MQTT.NewClientOptions().AddBroker("tcp://localhost:1883")
-   opts.SetClientID("mac-tarcisio")
-   opts.SetDefaultPublishHandler(f)
-	 topic := "/teste/memory"
+	opts := MQTT.NewClientOptions().AddBroker("tcp://localhost:1883")
+	opts.SetClientID("mac-tarcisio")
+	opts.SetDefaultPublishHandler(f)
+	topic := "/teste/memory"
 
-	 opts.OnConnect = func(c MQTT.Client) {
+	opts.OnConnect = func(c MQTT.Client) {
 		if token := c.Subscribe(topic, 0, f); token.Wait() && token.Error() != nil {
-						panic(token.Error())
-			}
+			panic(token.Error())
 		}
-		client := MQTT.NewClient(opts)
-		if token := client.Connect(); token.Wait() && token.Error() != nil {
-				panic(token.Error())
-		} else {
-				fmt.Printf("Connected to server\n")
-		}
+	}
+	MQTTclient := MQTT.NewClient(opts)
+
+	if token := MQTTclient.Connect(); token.Wait() && token.Error() != nil {
+		panic(token.Error())
+	} else {
+		fmt.Printf("Conectado ao broker tcp://localhost:1883\n")
+	}
 
 	<-c
-} //en
+}
+
+func createClient() client.Client {
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr:     "http://localhost:8086",
+		Username: "admin",
+		Password: "admin",
+	})
+
+	if err != nil {
+		log.Fatalln("Error: ", err)
+	}
+	return c
+}

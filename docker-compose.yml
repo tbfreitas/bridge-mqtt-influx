@@ -1,17 +1,9 @@
 version: "3"
 
 services:
-  MQTT:
-    image: vernemq/vernemq
-    ports: 
-      - "1883:1883"
-      - "8080:8080"
-    environment:
-      - "DOCKER_VERNEMQ_ACCEPT_EULA=yes"
-      - "DOCKER_VERNEMQ_ALLOW_ANONYMOUS=on"
-
   InfluxDB:
     image: influxdb
+    container_name: influxdb
     ports: 
       - "8086:8086"
       - "8083:8083"
@@ -22,11 +14,3 @@ services:
       - "INFLUXDB_HTTP_AUTH_ENABLED=true"
     volumes: 
       - "./influxdb.conf:/etc/influxdb/influxdb.conf"
-
-  Chronograf:
-    image: chronograf
-    ports:
-      - "8888:8888"
-    links:
-      - "InfluxDB:influx"
-  

@@ -23,7 +23,7 @@ const (
 	INFLUXDB_NAME = "teste_db"
 	USERNAME      = "admin"
 	PASSWORD      = "admin"
-	HOST          = "http://localhost:8086"
+	HOST          = "http://influxdb:8086"
 )
 
 var hc = createClient()
@@ -59,7 +59,7 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	opts := MQTT.NewClientOptions().AddBroker("tcp://localhost:1883")
+	opts := MQTT.NewClientOptions().AddBroker("mqtt://localhost:1883")
 	opts.SetClientID("mac-tarcisio")
 	opts.SetDefaultPublishHandler(f)
 	topic := "/teste/memory"
